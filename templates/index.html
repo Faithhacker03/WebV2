@@ -1,4 +1,4 @@
-<!-- START OF FILE templates/index.html -->
+<!-- START OF FINAL templates/index.html -->
 {% extends "layout.html" %}
 {% block title %}Dashboard - Garena Checker{% endblock %}
 
@@ -25,7 +25,7 @@
  Wi.~!X$?!-~    : ?$$$B$Wu(***$RM!           
  $R@i.#~ !     :   -$$$$$%$Mm$;              
  ?MXT@Wx.~    :     ~##$$$$M~                
-<span class="highlight">            𝐏𝐫𝐞𝐬𝐞𝐧𝐭𝐞𝐝 𝐁𝐲: @KenshiKupal </span>
+<span class="highlight">            𝐏𝐫𝐞𝐬𝐞𝐧𝐭𝐞𝐝 𝐁𝐲: PAPA MO </span>
     </pre>
 </div>
 
@@ -68,6 +68,8 @@
                         <label for="account_file" class="form-label">Account File (.txt)</label>
                         <input class="form-control" type="file" id="account_file" name="account_file" required>
                     </div>
+                    
+                    <!-- THIS IS THE NEWLY ADDED BLOCK -->
                     <div class="mb-3">
                         <label for="cookie_module" class="form-label">Cookie Module</label>
                         <select class="form-select" id="cookie_module" name="cookie_module">
@@ -75,6 +77,8 @@
                             <option value="change_cookie">Change Cookie</option>
                         </select>
                     </div>
+                    <!-- END OF NEWLY ADDED BLOCK -->
+                    
                     <div class="mb-3">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" role="switch" id="use_cookie_set" name="use_cookie_set">
@@ -165,7 +169,6 @@
         const statsWrongPass = document.getElementById('stats-wrongpass');
         const statsClean = document.getElementById('stats-clean');
         const statsNotClean = document.getElementById('stats-notclean');
-        const statsTgSent = document.getElementById('stats-tgsent'); // This is no longer used but kept for consistency
         const statsCaptcha = document.getElementById('stats-captcha');
         
         const captchaModal = new bootstrap.Modal(document.getElementById('captcha-modal'));
@@ -189,7 +192,7 @@
 
                 if (statusInterval) {
                     clearInterval(statusInterval);
-                    statusInterval = null; // Clear interval ID
+                    statusInterval = null;
                 }
             }
 
@@ -267,7 +270,9 @@
                      lastLogCount = 0;
                      logsContainer.innerHTML = '';
                      fetchStatus(); // immediate first check
-                     statusInterval = setInterval(fetchStatus, 1500);
+                     if (!statusInterval) {
+                        statusInterval = setInterval(fetchStatus, 1500);
+                     }
                 } else {
                     alert('Error starting checker: ' + data.message);
                     startBtn.disabled = false;
@@ -305,10 +310,12 @@
             });
         });
 
-        // Initial status check in case a check is already running for the user
+        // Initial status check
         fetchStatus();
-        statusInterval = setInterval(fetchStatus, 1500);
+        if (!statusInterval) {
+            statusInterval = setInterval(fetchStatus, 1500);
+        }
     });
 </script>
 {% endblock %}
-<!-- END OF FILE templates/index.html -->
+<!-- END OF FINAL templates/index.html -->
