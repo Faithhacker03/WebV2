@@ -1,0 +1,314 @@
+<!-- START OF FILE templates/index.html -->
+{% extends "layout.html" %}
+{% block title %}Dashboard - Garena Checker{% endblock %}
+
+{% block content %}
+<div class="banner">
+    <pre>
+                          :::!~!!!!!:.          
+                  .xUHWH!! !!?M88WHX:.       
+                .X*#M@$!!  !X!M$$$$$WWx:     
+               :!!!!!!?H! :!$!$$$$$$$$$8X:  
+             !!~  ~:~!! :~!$!%$$$$$$$$$$8X:  
+             :!~::!H![   ~.U$X!?W$$$$$$$MM! 
+             ~!~!!!!~~ .:XW$$$U!!?$$$$$$WMM! 
+               !:~~~ .:!M*T#$$$$WX??#MRRMMM! 
+               ~?WuxiW*     *#$$$$8!!!!??!!! 
+             :X- M$$$$  <span class="highlight">𖣘</span>   '#T#$T~!8$WUXU~ 
+          :%'  ~%$$$Mm:         ~!~ ?$$$$$$  
+          :! .-   ~T$$$$8xx.  .xWW- ~””##*'' 
+  .....   -~~:&lt;  !    ~?T$@@W@*?$$ <span class="highlight">𖣘</span> /’   
+ W$@@M!!! .!~~ !!     .:XUW$W!~ '*~:   :     
+ %^~~'.:x%'!!  !H:   !WM$$$$Ti.: .!WUnn!     
+ :::~:!. :X~ .: ?H.!u *$$$$$$$!W:U!T$$M~     
+ .~~   :X@!.-~   ?@WTWo('*$$$W$TH$!          
+ Wi.~!X$?!-~    : ?$$$B$Wu(***$RM!           
+ $R@i.#~ !     :   -$$$$$%$Mm$;              
+ ?MXT@Wx.~    :     ~##$$$$M~                
+<span class="highlight">            𝐏𝐫𝐞𝐬𝐞𝐧𝐭𝐞𝐝 𝐁𝐲: @KenshiKupal </span>
+    </pre>
+</div>
+
+{% if not current_user.is_paid or current_user.key_expiry < utcnow() %}
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle-fill"></i> <strong>Free Tier Limit:</strong> You can check a maximum of 100 accounts per run. Upgrade to a PRO account to unlock unlimited checks.
+</div>
+{% else %}
+<div class="alert alert-success">
+    <i class="bi bi-star-fill"></i> <strong>PRO Account Active:</strong> You have unlimited checks. Your access expires on {{ current_user.key_expiry.strftime('%Y-%m-%d %H:%M') }} UTC.
+</div>
+{% endif %}
+
+<div class="row mb-4">
+    <div class="col-md-6 offset-md-3">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-key-fill"></i> Redeem a License Key</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('redeem_key') }}" class="d-flex">
+                    {{ redeem_form.hidden_tag() }}
+                    {{ redeem_form.key(class="form-control me-2", placeholder="Enter your PRO key") }}
+                    {{ redeem_form.submit(class="btn btn-success") }}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div class="row">
+    <!-- Control Panel -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-gear-fill"></i> Control Panel</h5>
+            </div>
+            <div class="card-body">
+                <form id="start-form">
+                    <div class="mb-3">
+                        <label for="account_file" class="form-label">Account File (.txt)</label>
+                        <input class="form-control" type="file" id="account_file" name="account_file" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="cookie_module" class="form-label">Cookie Module</label>
+                        <select class="form-select" id="cookie_module" name="cookie_module">
+                            <option value="ken_cookie" selected>Ken Cookie</option>
+                            <option value="change_cookie">Change Cookie</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="use_cookie_set" name="use_cookie_set">
+                            <label class="form-check-label" for="use_cookie_set">Use hardcoded cookies from `cookie_config.py`</label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="auto_delete" name="auto_delete">
+                            <label class="form-check-label" for="auto_delete">Delete account file on completion</label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="force_restart" name="force_restart">
+                            <label class="form-check-label" for="force_restart">Start from beginning (ignore saved progress)</label>
+                        </div>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" id="start-btn" class="btn btn-primary"><i class="bi bi-play-circle-fill"></i> Start Checker</button>
+                        <button type="button" id="stop-btn" class="btn btn-danger" style="display: none;"><i class="bi bi-stop-circle-fill"></i> Stop Checker</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status and Logs -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-terminal-fill"></i> Live Status</h5>
+            </div>
+            <div class="card-body">
+                 <div class="progress mb-3" role="progressbar" style="height: 25px;">
+                    <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%">0%</div>
+                </div>
+                <div class="d-flex justify-content-between mb-2 text-muted">
+                    <small id="progress-text">Checked: 0 / 0</small>
+                    <small id="current-account-text">Status: Idle</small>
+                </div>
+                <div id="stats-container" class="d-flex flex-wrap justify-content-around small p-2 rounded bg-dark mb-3">
+                    <span><i class="bi bi-check-circle-fill text-success"></i> Hits: <span id="stats-hits">0</span></span>
+                    <span><i class="bi bi-x-circle-fill text-danger"></i> Fails: <span id="stats-fails">0</span></span>
+                    <span><i class="bi bi-key-fill text-warning"></i> Wrong Pass: <span id="stats-wrongpass">0</span></span>
+                    <span><i class="bi bi-shield-fill-check text-success"></i> Clean: <span id="stats-clean">0</span></span>
+                    <span><i class="bi bi-shield-fill-exclamation text-warning"></i> Not Clean: <span id="stats-notclean">0</span></span>
+                    <span><i class="bi bi-robot text-danger"></i> CAPTCHA: <span id="stats-captcha">0</span></span>
+                </div>
+                <div id="logs-container"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CAPTCHA Modal -->
+<div class="modal fade" id="captcha-modal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="bi bi-shield-lock-fill"></i> CAPTCHA Detected</h5>
+            </div>
+            <div class="modal-body">
+                <p>The checker is paused. A cookie was likely blocked. The bad cookie has been put on a 5-minute cooldown.</p>
+                <p>Please choose an action:</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary captcha-action-btn" data-action="next_cookie"><i class="bi bi-arrow-right-circle"></i> Try Next Cookie</button>
+                <button type="button" class="btn btn-primary captcha-action-btn" data-action="fetch_pool"><i class="bi bi-cloud-download-fill"></i> Fetch New Cookies</button>
+                <button type="button" class="btn btn-warning captcha-action-btn" data-action="retry_ip"><i class="bi bi-globe"></i> I Changed My IP/VPN</button>
+                <button type="button" class="btn btn-danger captcha-action-btn" data-action="stop_checker"><i class="bi bi-stop-circle-fill"></i> Stop & Exit</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const startForm = document.getElementById('start-form');
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const logsContainer = document.getElementById('logs-container');
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-text');
+        const currentAccountText = document.getElementById('current-account-text');
+        
+        const statsHits = document.getElementById('stats-hits');
+        const statsFails = document.getElementById('stats-fails');
+        const statsWrongPass = document.getElementById('stats-wrongpass');
+        const statsClean = document.getElementById('stats-clean');
+        const statsNotClean = document.getElementById('stats-notclean');
+        const statsTgSent = document.getElementById('stats-tgsent'); // This is no longer used but kept for consistency
+        const statsCaptcha = document.getElementById('stats-captcha');
+        
+        const captchaModal = new bootstrap.Modal(document.getElementById('captcha-modal'));
+        
+        let statusInterval;
+        let lastLogCount = 0;
+
+        function updateUI(status) {
+            if (!status) return;
+
+            if (status.running) {
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'block';
+            } else {
+                startBtn.style.display = 'block';
+                stopBtn.style.display = 'none';
+                startBtn.disabled = false;
+                startBtn.innerHTML = '<i class="bi bi-play-circle-fill"></i> Start Checker';
+                stopBtn.disabled = false;
+                stopBtn.textContent = 'Stop Checker';
+
+                if (statusInterval) {
+                    clearInterval(statusInterval);
+                    statusInterval = null; // Clear interval ID
+                }
+            }
+
+            const progress = status.total > 0 ? (status.progress / status.total) * 100 : 0;
+            progressBar.style.width = progress.toFixed(2) + '%';
+            progressBar.textContent = progress.toFixed(0) + '%';
+            progressText.textContent = `Checked: ${status.progress || 0} / ${status.total || 0}`;
+            currentAccountText.textContent = `Current: ${status.current_account || 'N/A'}`;
+
+            if (status.stats) {
+                statsHits.textContent = status.stats.successful || 0;
+                statsFails.textContent = status.stats.failed || 0;
+                statsWrongPass.textContent = status.stats.incorrect_pass || 0;
+                statsClean.textContent = status.stats.clean || 0;
+                statsNotClean.textContent = status.stats.not_clean || 0;
+                statsCaptcha.textContent = status.stats.captcha_count || 0;
+            }
+
+            if (status.logs && status.logs.length > lastLogCount) {
+                const newLogs = status.logs.slice(lastLogCount);
+                newLogs.forEach(log => {
+                    const logElement = document.createElement('div');
+                    logElement.className = `log-line ${log.class}`;
+                    logElement.innerHTML = `<span class="timestamp">${log.timestamp}</span><span>${log.message}</span>`;
+                    logsContainer.appendChild(logElement);
+                });
+                logsContainer.scrollTop = logsContainer.scrollHeight;
+                lastLogCount = status.logs.length;
+            }
+            
+            if (status.captcha_detected) {
+                captchaModal.show();
+            } else {
+                captchaModal.hide();
+            }
+            
+            if(status.final_summary && !status.running) {
+                const summaryElement = document.createElement('pre');
+                summaryElement.className = 'text-success p-2 mt-2 border border-success rounded';
+                summaryElement.textContent = status.final_summary;
+                logsContainer.appendChild(summaryElement);
+                logsContainer.scrollTop = logsContainer.scrollHeight;
+            }
+        }
+
+        function fetchStatus() {
+            fetch('{{ url_for("get_status") }}')
+                .then(response => {
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return response.json();
+                })
+                .then(data => {
+                    updateUI(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching status:', error);
+                    if (statusInterval) clearInterval(statusInterval);
+                });
+        }
+
+        startForm.addEventListener('submit', function (e) {
+            e.preventDefault(); 
+            
+            startBtn.disabled = true;
+            startBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starting...';
+            
+            const formData = new FormData(startForm);
+            
+            fetch('{{ url_for("start_check") }}', {
+                method: 'POST',
+                body: formData
+            }).then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                     lastLogCount = 0;
+                     logsContainer.innerHTML = '';
+                     fetchStatus(); // immediate first check
+                     statusInterval = setInterval(fetchStatus, 1500);
+                } else {
+                    alert('Error starting checker: ' + data.message);
+                    startBtn.disabled = false;
+                    startBtn.innerHTML = '<i class="bi bi-play-circle-fill"></i> Start Checker';
+                }
+            }).catch(err => {
+                alert('An error occurred while trying to start the checker.');
+                startBtn.disabled = false;
+                startBtn.innerHTML = '<i class="bi bi-play-circle-fill"></i> Start Checker';
+            });
+        });
+
+        stopBtn.addEventListener('click', function () {
+            fetch('{{ url_for("stop_check_route") }}', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data.message);
+                    stopBtn.disabled = true;
+                    stopBtn.textContent = "Stopping...";
+                });
+        });
+        
+        document.querySelectorAll('.captcha-action-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const action = this.dataset.action;
+                const formData = new FormData();
+                formData.append('action', action);
+                
+                fetch('{{ url_for("captcha_action") }}', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                captchaModal.hide();
+            });
+        });
+
+        // Initial status check in case a check is already running for the user
+        fetchStatus();
+        statusInterval = setInterval(fetchStatus, 1500);
+    });
+</script>
+{% endblock %}
+<!-- END OF FILE templates/index.html -->
