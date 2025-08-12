@@ -33,6 +33,7 @@ except ImportError as e:
 
 # --- APP CONFIGURATION ---
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+# Note: These folders are for local dev. On Render, we use /tmp for uploads.
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 RESULTS_BASE_DIR = os.path.join(BASE_DIR, 'results')
 LOGS_BASE_DIR = os.path.join(BASE_DIR, 'logs')
@@ -41,7 +42,6 @@ APP_DATA_DIR = os.path.join(BASE_DIR, 'app_data')
 # --- Flask App Initialization ---
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(16))
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # --- DATABASE CONFIGURATION FOR RENDER + NEON/RAILWAY ---
 database_url = os.environ.get('DATABASE_URL')
@@ -55,7 +55,7 @@ else:
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # --- END OF DATABASE CONFIGURATION ---
 
-# Create temporary folders (these won't persist on Render but are good practice)
+# Create folders locally if they don't exist
 for folder in [UPLOAD_FOLDER, RESULTS_BASE_DIR, LOGS_BASE_DIR, APP_DATA_DIR]:
     os.makedirs(folder, exist_ok=True)
 
@@ -314,18 +314,6 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
             selected_cookie_module = getattr(sys.modules[__name__], selected_cookie_module_name)
             stop_event, captcha_pause_event = stop_events[user_id], captcha_pause_events[user_id]
             
-            progress_file = os.path.join(APP_DATA_DIR, f'progress_state_{user_id}.json')
-            if force_restart and os.path.exists(progress_file): os.remove(progress_file)
-            
-            start_from_index = 0
-            if os.path.exists(progress_file):
-                try:
-                    with open(progress_file, 'r') as f:
-                        progress_data = json.load(f)
-                        if progress_data.get('source_file_path') == file_path:
-                            start_from_index = progress_data.get('last_processed_index', -1) + 1
-                except (IOError, json.JSONDecodeError): pass
-            
             stats, date = {'successful': 0, 'failed': 0, 'clean': 0, 'not_clean': 0, 'incorrect_pass': 0, 'no_exist': 0, 'captcha_count': 0}, get_datenow()
             
             try:
@@ -341,10 +329,10 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
                 log_message(f"Free tier: Processing first {line_limit} of {len(accounts)} accounts.", 'text-warning', user_id)
                 accounts = accounts[:line_limit]
             
-            total_accounts, accounts_to_process = len(accounts), accounts[start_from_index:]
+            total_accounts, accounts_to_process = len(accounts), accounts
             
             with status_lock:
-                check_status[user_id]['total'], check_status[user_id]['progress'], check_status[user_id]['stats'] = total_accounts, start_from_index, stats
+                check_status[user_id]['total'], check_status[user_id]['progress'], check_status[user_id]['stats'] = total_accounts, 0, stats
 
             cookie_state = {'pool': [], 'index': -1, 'cooldown': {}}
             if use_cookie_set:
@@ -357,11 +345,10 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
                 stop_event.set()
 
             for loop_idx, acc in enumerate(accounts_to_process):
-                original_index = start_from_index + loop_idx
                 if stop_event.is_set(): break
                 
                 with status_lock:
-                    check_status[user_id]['progress'], check_status[user_id]['current_account'] = original_index + 1, acc
+                    check_status[user_id]['progress'], check_status[user_id]['current_account'] = loop_idx + 1, acc
                 
                 if ':' not in acc:
                     log_message(f"Invalid format: {acc} ➔ Skipping", "text-warning", user_id)
@@ -407,7 +394,7 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
                 if stop_event.is_set(): break
                 
                 if isinstance(result, tuple):
-                    console_message, _, _, _, is_clean, file_to_write, content_to_write = result
+                    console_message, _, _, _, is_clean, _, _ = result
                     log_message(console_message, "text-success", user_id)
                     stats['successful'] += 1
                     if is_clean: stats['clean'] += 1
@@ -506,12 +493,18 @@ def start_check():
             return jsonify({'status': 'error', 'message': 'A check is already running for your account.'}), 400
         check_status[user_id] = {'running': True, 'progress': 0, 'total': 0, 'logs': [], 'stats': {}, 'final_summary': None, 'captcha_detected': False, 'current_account': ''}
         stop_events[user_id], captcha_pause_events[user_id] = threading.Event(), threading.Event()
+    
     file = request.files.get('account_file')
     if not file or file.filename == '': return jsonify({'status': 'error', 'message': 'No file selected.'}), 400
+    
+    # --- THIS IS THE CORRECTED FILE HANDLING BLOCK ---
     filename = secure_filename(f"{user_id}_{file.filename}")
-    file_path = os.path.join(app.config.get('UPLOAD_FOLDER', 'uploads'), filename)
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    # Use the /tmp directory, which is writable on Render's free tier
+    temp_dir = '/tmp'
+    file_path = os.path.join(temp_dir, filename)
     file.save(file_path)
+    # --- END OF CORRECTION ---
+
     cookie_module, use_cookie_set, auto_delete, force_restart = request.form.get('cookie_module', 'ken_cookie'), 'use_cookie_set' in request.form, 'auto_delete' in request.form, 'force_restart' in request.form
     log_message("Starting new check...", "text-info", user_id)
     thread = threading.Thread(target=run_check_task, args=(user_id, file_path, cookie_module, use_cookie_set, auto_delete, force_restart))
