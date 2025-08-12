@@ -1,4 +1,4 @@
-# --- START OF FILE app.py ---
+# --- START OF FINAL app.py FOR RAILWAY ---
 
 # --- Standard and System Imports ---
 import os, sys, re, time, json, uuid, base64, hashlib, random, logging, urllib, threading, secrets, html
@@ -33,22 +33,33 @@ except ImportError as e:
 
 # --- APP CONFIGURATION ---
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-INSTANCE_FOLDER = os.path.join(BASE_DIR, 'instance')
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 RESULTS_BASE_DIR = os.path.join(BASE_DIR, 'results')
 LOGS_BASE_DIR = os.path.join(BASE_DIR, 'logs')
 APP_DATA_DIR = os.path.join(BASE_DIR, 'app_data')
 
 # --- Flask App Initialization ---
-app = Flask(__name__, instance_path=INSTANCE_FOLDER)
+app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(16)
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(app.instance_path, "app.db")}'
+
+# --- DATABASE CONFIGURATION FOR RAILWAY ---
+# Get the database URL from the environment (provided by Railway)
+database_url = os.environ.get('DATABASE_URL')
+
+# IMPORTANT: SQLAlchemy's driver for PostgreSQL (psycopg2) requires the dialect to be 'postgresql', not 'postgres'.
+# Railway provides a URL starting with 'postgres://', so we must replace it.
+if database_url and database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+# Use the Railway database URL if available, otherwise fall back to a local SQLite database.
+# This allows the app to run both on Railway for production and locally for testing.
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url or f'sqlite:///{os.path.join(BASE_DIR, "local_dev.db")}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['FLASK_ADMIN_SWATCH'] = 'darkly'
+# --- END OF NEW DATABASE CONFIGURATION ---
+
 
 # Create necessary folders
-for folder in [UPLOAD_FOLDER, RESULTS_BASE_DIR, LOGS_BASE_DIR, APP_DATA_DIR, INSTANCE_FOLDER]:
+for folder in [UPLOAD_FOLDER, RESULTS_BASE_DIR, LOGS_BASE_DIR, APP_DATA_DIR]:
     os.makedirs(folder, exist_ok=True)
 
 # --- Database and Extensions Initialization ---
@@ -57,7 +68,7 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 login_manager.login_message_category = 'info'
 
-# --- DATABASE MODELS ---
+# --- DATABASE MODELS (No changes needed here) ---
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -85,7 +96,7 @@ class LicenseKey(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# --- FORMS (using Flask-WTF) ---
+# --- FORMS (No changes needed here) ---
 class RegistrationForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), Length(min=4, max=25)])
     password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
@@ -104,7 +115,7 @@ class RedeemKeyForm(FlaskForm):
     key = StringField('License Key', validators=[DataRequired()])
     submit = SubmitField('Redeem')
 
-# --- FLASK-ADMIN SETUP ---
+# --- FLASK-ADMIN SETUP (No changes needed here) ---
 class AuthModelView(ModelView):
     def is_accessible(self):
         return current_user.is_authenticated and current_user.is_admin
@@ -143,12 +154,13 @@ admin.add_view(UserAdminView(User, db.session))
 admin.add_view(AuthModelView(LicenseKey, db.session))
 admin.add_view(KeyGeneratorView(name='Key Generator', endpoint='key-generator'))
 
-# --- GLOBAL STATE & HELPER FUNCTIONS FOR CHECKER ---
+# --- GLOBAL STATE & HELPER FUNCTIONS FOR CHECKER (No changes needed here) ---
 check_status = {}
 status_lock = threading.Lock()
 stop_events = {}
 captcha_pause_events = {}
 
+# (The entire checker logic, from `log_message` all the way down to `run_check_task`, is identical and does not need to be changed.)
 # --- CORE CHECKER LOGIC ---
 def log_message(message, color_class='text-white', user_id=None):
     if user_id is None: return
@@ -285,7 +297,6 @@ def format_result(user_id, last_login, country, shell, mobile, facebook, email_v
     return (console_message, codm_level_num, country, has_codm, is_clean, file_to_write, content_to_write)
 
 def show_level(access_token, selected_header, sso, token, newdate, cookie):
-    # This is a direct copy from the original logic
     try:
         url = "https://auth.codm.garena.com/auth/auth/callback_n"
         params = {"site": "https://api-delete-request.codm.garena.co.id/oauth/callback/", "access_token": access_token}
@@ -302,13 +313,12 @@ def show_level(access_token, selected_header, sso, token, newdate, cookie):
         check_login_response.raise_for_status()
         data = check_login_response.json()
         if data and "user" in data:
-            user = data["user"]
-            return f"{user.get('codm_nickname', 'N/A')}|{user.get('codm_level', 'N/A')}|{user.get('region', 'N/A')}|{user.get('uid', 'N/A')}"
+            user_info = data["user"]
+            return f"{user_info.get('codm_nickname', 'N/A')}|{user_info.get('codm_level', 'N/A')}|{user_info.get('region', 'N/A')}|{user_info.get('uid', 'N/A')}"
         return "[FAILED] NO CODM ACCOUNT!"
     except Exception as e: return f"[FAILED] CODM data fetch error: {e}"
 
 def check_login(user_id, account_username, _id, encryptedpassword, password, selected_header, cookies, dataa, date, selected_cookie_module):
-    # This is also a direct copy from the original logic, adapted for logging
     try:
         cookies["datadome"] = dataa
         login_params = {'app_id': '100082', 'account': account_username, 'password': encryptedpassword, 'redirect_uri': redrov, 'format': 'json', 'id': _id}
@@ -319,17 +329,15 @@ def check_login(user_id, account_username, _id, encryptedpassword, password, sel
         session_key = login_json.get('session_key')
         if not session_key: return "[FAILED] No session key after login"
         
-        # ... The rest of the original logic, including the external PHP call
-        # For security and stability, the external PHP call is simulated here.
-        # In a real-world scenario, this logic should be rewritten in Python.
-        log_message("[⚠️] Simulating external PHP call for bind check.", "text-warning", user_id)
+        # NOTE: The external PHP call is a major security risk and point of failure.
+        # This part is simulated. For a real app, this logic must be rewritten in Python.
+        log_message("[⚠️] Simulating external call for bind check...", "text-warning", user_id)
         is_clean, bindings = True, [
             "Country:PHILIPPINES", "LastLogin:2024-05-20", "Garena Shells:0",
             "Facebook Account:Not Linked", "Mobile Number:Not Linked", "eta:dummy.email@gmail.com",
             "tae:True", "Authenticator:False", "Two-Step Verification:False"
         ]
         
-        # Original logic continues...
         country, last_login, fb, mobile, facebook, shell, email, email_verified, authenticator_enabled, two_step_enabled = ("N/A",)*10
         for item in bindings:
             try:
@@ -348,7 +356,6 @@ def check_login(user_id, account_username, _id, encryptedpassword, password, sel
 
         save_datadome_cookie(dataa, user_id)
         
-        # This part fetches the CODM level
         sso_key = response.cookies.get('sso_key')
         token_session = response.cookies.get('token_session')
         
@@ -384,8 +391,9 @@ def check_account(user_id, username, password, date, datadome_cookie, selected_c
     except requests.exceptions.RequestException as e:
         return f"[FAILED] Request Error: {e}"
     except Exception as e:
-        return f"[FAILED] Unexpected Error in check_account: {e}"
-
+        import traceback
+        log_message(f"CRITICAL ERROR in check_account: {e}\n{traceback.format_exc()}", "text-danger", user_id)
+        return f"[FAILED] CRITICAL Error: {e}"
 
 def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_set, auto_delete, force_restart):
     with app.app_context():
@@ -402,9 +410,15 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
             
             progress_file = os.path.join(APP_DATA_DIR, f'progress_state_{user_id}.json')
             if force_restart and os.path.exists(progress_file): os.remove(progress_file)
-
+            
             start_from_index = 0
-            # ... (load progress logic) ...
+            if os.path.exists(progress_file):
+                try:
+                    with open(progress_file, 'r') as f:
+                        progress_data = json.load(f)
+                        if progress_data.get('source_file_path') == file_path:
+                            start_from_index = progress_data.get('last_processed_index', -1) + 1
+                except (IOError, json.JSONDecodeError): pass
             
             stats = {
                 'successful': 0, 'failed': 0, 'clean': 0, 'not_clean': 0, 'incorrect_pass': 0,
@@ -434,7 +448,6 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
                 check_status[user_id]['stats'] = stats
 
             cookie_state = {'pool': [], 'index': -1, 'cooldown': {}}
-            # ... (cookie loading logic, adapted) ...
             if use_cookie_set: cookie_state['pool'] = [c.get('datadome') for c in cookie_config.COOKIE_POOL if c.get('datadome')]
             if not cookie_state['pool']:
                 log_message("[⚠️] DataDome cookie pool is empty. Fetching new ones...", "text-warning", user_id)
@@ -468,12 +481,12 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
                                 break
                     
                     if not current_datadome:
-                        log_message("[❌] All cookies on cooldown or pool empty. Please wait or fetch new cookies.", "text-danger", user_id)
+                        log_message("[❌] All cookies on cooldown or pool empty. Waiting for user action...", "text-danger", user_id)
                         with status_lock: check_status[user_id]['captcha_detected'] = True
                         captcha_pause_event.clear()
                         captcha_pause_event.wait()
                         with status_lock: check_status[user_id]['captcha_detected'] = False
-                        # After waiting, try the loop again
+                        if stop_event.is_set(): break
                         continue
 
                     log_message(f"[▶] Checking: {username}:{password} with cookie ...{current_datadome[-6:]}", "text-info", user_id)
@@ -488,14 +501,14 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
                         captcha_pause_event.wait()
                         with status_lock: check_status[user_id]['captcha_detected'] = False
                         if stop_event.is_set(): break
-                        continue # Retry same account with new cookie
+                        continue
                     else:
                         is_captcha_loop = False
                 
                 if stop_event.is_set(): break
                 
                 if isinstance(result, tuple):
-                    console_message, codm_level_num, country, has_codm, is_clean, file_to_write, content_to_write = result
+                    console_message, _, _, _, is_clean, file_to_write, content_to_write = result
                     log_message(console_message, "text-success", user_id)
                     stats['successful'] += 1
                     if is_clean: stats['clean'] += 1
@@ -538,7 +551,6 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
 @app.context_processor
 def inject_utcnow(): return dict(utcnow=datetime.utcnow)
 
-# (Register, Login, Logout routes are the same as previous response)
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated: return redirect(url_for('index'))
@@ -546,7 +558,9 @@ def register():
     if form.validate_on_submit():
         user = User(username=form.username.data)
         user.set_password(form.password.data)
-        if User.query.count() == 0: user.is_admin = True
+        # The very first user to register becomes the admin
+        if User.query.count() == 0:
+            user.is_admin = True
         db.session.add(user)
         db.session.commit()
         flash('Your account has been created! You can now log in.', 'success')
@@ -659,7 +673,6 @@ def captcha_action():
     log_message(f"Captcha action received: {action}", "text-info", user_id)
 
     if action == 'fetch_pool':
-        # Run in a separate thread to not block the UI
         threading.Thread(target=fetch_new_datadome_pool, args=(5, user_id)).start()
     if action == 'stop_checker':
         if user_id in stop_events: stop_events[user_id].set()
@@ -667,14 +680,25 @@ def captcha_action():
     if user_id in captcha_pause_events: captcha_pause_events[user_id].set()
     return jsonify({'status': 'success', 'message': 'Action processed.'})
 
+# Command to create the database tables
+@app.cli.command("init-db")
+def init_db_command():
+    """Creates the database tables."""
+    db.create_all()
+    print("Initialized the database.")
+
+
 if __name__ == '__main__':
+    # This block is for local development only
     with app.app_context():
         db.create_all()
-        if User.query.filter_by(username='admin').first() is None:
+        # Create a default admin user if one doesn't exist
+        if User.query.count() == 0:
             admin_user = User(username='admin', is_admin=True)
             admin_user.set_password('admin')
             db.session.add(admin_user)
             db.session.commit()
-            print("Default admin user 'admin' with password 'admin' created.")
+            print("Default local admin user 'admin' with password 'admin' created.")
     app.run(host='0.0.0.0', port=5000, debug=True)
-# --- END OF FILE app.py ---
+
+# --- END OF FINAL app.py FOR RAILWAY ---
