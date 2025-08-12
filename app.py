@@ -268,7 +268,7 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
             try:
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as f: accounts = list(OrderedDict.fromkeys(line.strip() for line in f if line.strip()))
             except Exception as e:
-                log_message(f"Error reading account file: {e}", "text-danger", user_id)
+                log_message(f"Error reading account file: {e}", "text-danger", user_id);
                 with status_lock:
                     if user_id in check_status: check_status[user_id]['running'] = False
                 return
@@ -296,8 +296,7 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
                     if not current_datadome:
                         log_message("[❌] All cookies on cooldown. Waiting for user...", "text-danger", user_id)
                         with status_lock: check_status[user_id]['captcha_detected'] = True
-                        captcha_pause_event.clear()
-                        captcha_pause_event.wait()
+                        captcha_pause_event.clear(); captcha_pause_event.wait();
                         with status_lock: check_status[user_id]['captcha_detected'] = False
                         if stop_event.is_set(): break; continue
                     log_message(f"[▶] Checking: {username}:{password} with cookie ...{current_datadome[-6:]}", "text-info", user_id)
@@ -306,12 +305,8 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
                         stats['captcha_count'] += 1; log_message(f"[🔴 CAPTCHA] on cookie ...{current_datadome[-6:]}. Cooldown 5 mins.", "text-danger", user_id)
                         cookie_state['cooldown'][current_datadome] = time.time() + 300
                         with status_lock: check_status[user_id]['captcha_detected'] = True
-                        captcha_pause_event.clear()
-                        # THIS IS THE CORRECTED LINE
-                        captcha_pause_event.wait()
-                        with status_lock: 
-                            check_status[user_id]['captcha_detected'] = False
-                        # END CORRECTION
+                        captcha_pause_event.clear(); captcha_pause_event.wait()
+                        with status_lock: check_status[user_id]['captcha_detected'] = False
                         if stop_event.is_set(): break; continue
                     else: is_captcha_loop = False
                 if stop_event.is_set(): break
@@ -413,7 +408,10 @@ def start_check():
 
 @app.route('/status')
 @login_required
-def get_status(): with status_lock: return jsonify(check_status.get(current_user.id, {}))
+def get_status():
+    # THIS IS THE CORRECTED FUNCTION
+    with status_lock:
+        return jsonify(check_status.get(current_user.id, {}))
 
 @app.route('/stop_check', methods=['POST'])
 @login_required
