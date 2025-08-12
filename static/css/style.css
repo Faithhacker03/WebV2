@@ -1,0 +1,83 @@
+/* START OF FILE static/css/style.css */
+body {
+    background-color: #121212;
+    color: #e0e0e0;
+}
+.card {
+    background-color: #1e1e1e;
+    border: 1px solid #333;
+}
+.form-control, .form-select {
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+    border-color: #444;
+}
+.form-control:focus, .form-select:focus {
+    background-color: #333;
+    color: #fff;
+    border-color: #0d6efd;
+    box-shadow: none;
+}
+.btn-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+.alert-success { background-color: #193c26; border-color: #28a745; color: #d1e7dd; }
+.alert-warning { background-color: #4d3c0d; border-color: #ffc107; color: #fff3cd; }
+.alert-danger { background-color: #491a21; border-color: #dc3545; color: #f8d7da; }
+.alert-info { background-color: #0e3c45; border-color: #17a2b8; color: #cff4fc; }
+
+/* Auth Pages */
+.auth-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 70vh;
+}
+.auth-card {
+    width: 100%;
+    max-width: 400px;
+}
+
+/* Checker Page Specifics */
+.banner {
+    font-family: 'Courier New', Courier, monospace;
+    white-space: pre;
+    color: #888;
+    text-align: center;
+    font-size: 0.9em;
+    line-height: 1.1;
+    padding: 1rem 0;
+    overflow-x: auto;
+}
+.banner .highlight { color: #dc3545; }
+#logs-container {
+    height: 400px;
+    background-color: #0c0c0c;
+    border: 1px solid #333;
+    padding: 10px;
+    overflow-y: scroll;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85em;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+.log-line { display: flex; }
+.log-line .timestamp { color: #888; margin-right: 10px; flex-shrink: 0; }
+.progress-bar { transition: width 0.5s ease-in-out; }
+
+/* Text colors for logs */
+.text-success { color: #28a745 !important; }
+.text-danger { color: #dc3545 !important; }
+.text-warning { color: #ffc107 !important; }
+.text-info { color: #17a2b8 !important; }
+
+/* Modal */
+.modal.fade { transition: opacity .3s linear; }
+#captcha-modal { background-color: rgba(0,0,0,0.7); }
+.modal-footer { flex-wrap: wrap; justify-content: center; }
+.captcha-action-btn { margin: 5px; }
+
+/* Navbar */
+.navbar-brand { font-weight: bold; }
+/* END OF FILE static/css/style.css */
